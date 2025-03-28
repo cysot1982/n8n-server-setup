@@ -1,0 +1,13 @@
+[Unit]
+Description=n8n workflow automation
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/n8n
+ExecStart=/root/n8n/node_modules/.bin/n8n start
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
