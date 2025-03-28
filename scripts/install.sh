@@ -15,6 +15,10 @@ if [ -z "$DOMAIN" ]; then
   read -p "Enter your domain for n8n (e.g., n8n.example.com): " DOMAIN
 fi
 
+# Determine script and repository paths
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+REPO_ROOT="$( dirname "$SCRIPT_DIR" )"
+
 # Create n8n directory
 mkdir -p ~/n8n
 cd ~/n8n
@@ -24,15 +28,15 @@ apt update
 apt install -y nginx certbot python3-certbot-nginx
 
 # Setup n8n
-cp ../package.json ./
+cp "$REPO_ROOT/package.json" ./
 npm install
 
 # Configure nginx
-sed "s/n8n.lowcodeai.tech/$DOMAIN/g" ../nginx/n8n.conf > /etc/nginx/sites-available/n8n
+sed "s/n8n.lowcodeai.tech/$DOMAIN/g" "$REPO_ROOT/nginx/n8n.conf" > /etc/nginx/sites-available/n8n
 ln -sf /etc/nginx/sites-available/n8n /etc/nginx/sites-enabled/
 
 # Configure systemd
-cp ../systemd/n8n.service /etc/systemd/system/
+cp "$REPO_ROOT/systemd/n8n.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable n8n
 
