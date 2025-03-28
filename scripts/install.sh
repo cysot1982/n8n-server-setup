@@ -19,35 +19,81 @@ fi
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 REPO_ROOT="$( dirname "$SCRIPT_DIR" )"
 
+# Install prerequisites
+apt update
+apt install -y curl git
+
+# Install Node.js (at least v20.15 as required by n8n)
+echo "Installing Node.js..."
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt install -y nodejs
+npm install -g npm@latest
+
+# Verify Node.js installation
+echo "Node.js version:"
+node -v
+echo "npm version:"
+npm -v
+
+# Install other dependencies
+apt install -y nginx certbot python3-certbot-nginx
+
 # Create n8n directory
 mkdir -p ~/n8n
 cd ~/n8n
-
-# Install dependencies
-apt update
-apt install -y nginx certbot python3-certbot-nginx
 
 # Setup n8n
 cp "$REPO_ROOT/package.json" ./
 npm install
 
-# Configure nginx
-sed "s/n8n.lowcodeai.tech/$DOMAIN/g" "$REPO_ROOT/nginx/n8n.conf" > /etc/nginx/sites-available/n8n
+# Configure Nginx for HTTP first (without SSL)
+cat > /etc/nginx/sites-available/n8n << EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+    
+    location / {
+        proxy_pass http://localhost:5678;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_intercept_errors on;
+        client_max_body_size 500m;
+        
+        # Longer timeouts for webhooks
+        proxy_read_timeout 90s;
+        proxy_connect_timeout 90s;
+        proxy_send_timeout 90s;
+    }
+}
+EOF
+
+# Enable site
 ln -sf /etc/nginx/sites-available/n8n /etc/nginx/sites-enabled/
+
+# Test Nginx config
+nginx -t
+
+# Reload Nginx
+systemctl reload nginx
+
+# Get SSL certificate
+echo "Getting SSL certificate for $DOMAIN..."
+certbot --nginx -d $DOMAIN
 
 # Configure systemd
 cp "$REPO_ROOT/systemd/n8n.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable n8n
-
-# Test nginx config
-nginx -t
-
-# Reload nginx
-systemctl reload nginx
-
-# Get SSL certificate
-certbot --nginx -d $DOMAIN
 
 # Start n8n
 systemctl start n8n
